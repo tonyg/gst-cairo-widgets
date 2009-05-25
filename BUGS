@@ -1,0 +1,2 @@
+Empty lines in paragraphs being composed aren't rendered. Need
+paragraph-marker placeholder or similar?
