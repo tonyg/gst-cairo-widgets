@@ -570,7 +570,7 @@ FilledBorderedPainter subclass: RoundedRectanglePainter [
 ].
 
 PositionableWidget subclass: TextWidget [
-    | paragraph extent composition |
+    | paragraph extent composition selectedPos selectedRect |
 
     paragraph [ ^paragraph ]
     paragraph: aParagraph [ paragraph := aParagraph ]
@@ -587,6 +587,9 @@ PositionableWidget subclass: TextWidget [
 
     keyPressed: sym unicode: unicodeCh modifiers: modifierSet [
 	Transcript << 'TW key down: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
+	unicodeCh asciiValue > 0 ifTrue: [
+	    selectedRect ifNotNil: [
+		Transcript << 'Would insert text ''' << unicodeCh << '''.'; nl]].
     ]
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet [
 	Transcript << 'TW key   up: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
@@ -596,8 +599,13 @@ PositionableWidget subclass: TextWidget [
     gainedCursor [ Transcript << 'TW gainedCursor'; nl ]
 
     clicked: aButtonNumber at: aPoint [
+	| pos |
 	Transcript << 'TW clicked: ' << aButtonNumber << ' at: ' << aPoint; nl.
-	Transcript << '   position: ' << (composition positionAtPoint: aPoint); nl.
+	Transcript << '   position: ' << (pos := composition positionAtPoint: aPoint); nl.
+	selectedPos := pos.
+	pos ifNil: [selectedRect := nil]
+	    ifNotNil: [selectedRect := (composition rectangleAtPosition: pos)].
+	self invalidate.
 	^ super clicked: aButtonNumber at: aPoint.
     ]
 
@@ -612,8 +620,18 @@ PositionableWidget subclass: TextWidget [
 	gc moveTo: b origin.
 	gc newPath; rectangle: b; clip.
 
-	composition := paragraph composeUsing: gc width: b width.
-	composition renderOn: gc.
+	gc saveWhile: [
+	    composition := paragraph composeUsing: gc width: b width.
+	    composition renderOn: gc.
+	].
+
+	selectedRect ifNotNil: [
+	    gc saveWhile: [
+		gc newPath.
+		gc source: (Cairo.Color blue withAlpha: 0.2).
+		gc rectangle: selectedRect; fill.
+	    ].
+	].
     ]
 ].
 
