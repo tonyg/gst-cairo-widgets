@@ -18,6 +18,7 @@
 "
 
 FileStream fileIn: 'loadscript.st'.
+FileStream fileIn: 'intervalcollection.st'.
 FileStream fileIn: 'text.st'.
 
 SDL.SdlDisplay extend [
