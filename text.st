@@ -18,6 +18,16 @@ Object subclass: TextStyle [
     leading [ ^ leading ifNil: [ 2 ] ]
     leading: aNumber [ leading := aNumber ]
 
+    = other [
+	color = other color ifFalse: [^false].
+	family = other family ifFalse: [^false].
+	slant = other slant ifFalse: [^false].
+	weight = other weight ifFalse: [^false].
+	fontSize = other fontSize ifFalse: [^false].
+	leading = other leading ifFalse: [^false].
+	^true
+    ]
+
     applyTo: gc [
 	gc
 	    source: self color;
@@ -117,6 +127,28 @@ Object subclass: SpanLine [
 	in a span line."
 	^ positionOffset + self totalPositionCount
     ]
+
+    rectangleAtPosition: aPosition using: gc [
+	| intraLinePosition userCoordOffset spanCount r |
+
+	spans ifNil: [^nil].
+
+	intraLinePosition := positionOffset.
+	userCoordOffset := 0.
+	spans do: [:span |
+	    spanCount := aPosition - intraLinePosition.
+	    ((aPosition >= intraLinePosition) and: [spanCount <= span positionCount])
+		ifTrue: [
+		    r := span rectangleAtPosition: spanCount
+			      using: gc
+			      top: self topLine
+			      bottom: self topLine + self totalHeight.
+		    r moveBy: userCoordOffset@0.
+		    ^ r].
+	    intraLinePosition := intraLinePosition + span positionCount.
+	    userCoordOffset := userCoordOffset + span width].
+	^ nil
+    ]
 ].
 
 Object subclass: Span [
@@ -127,6 +159,7 @@ Object subclass: Span [
     renderSpanOn: gc [ self subclassResponsibility ]
     positionCount [ self subclassResponsibility ]
     positionAtOffset: pointX [ self subclassResponsibility ]
+    rectangleAtPosition: p using: gc top: top bottom: bottom [ self subclassResponsibility ]
 ].
 
 Span subclass: TextSpan [
@@ -176,6 +209,15 @@ Span subclass: TextSpan [
 	(pos > self positionCount)
 	    ifTrue: [self error: 'Can p really be greater than positionCount?'].
 	^ pos
+    ]
+
+    rectangleAtPosition: p using: gc top: top bottom: bottom [
+	| s left right |
+	styledText style applyTo: gc.
+	s := styledText string.
+	left := (gc textExtents: (s copyFrom: low to: low + p - 2)) advance x.
+	right := (gc textExtents: (s copyFrom: low to: low + p - 1)) advance x.
+	^ left@top corner: right@bottom
     ]
 ].
 
@@ -358,7 +400,35 @@ Object subclass: ParagraphComposition [
 			       between: 1
 			       and: (lines size)) - 1.
 	line := lines at: index.
-	(aPoint y - line topLine) > line totalHeight ifTrue: [^nil].
+	((aPoint y - line topLine) > line totalHeight)
+		ifTrue: [^ line positionOffset + line totalPositionCount].
 	^ storedGC saveWhile: [ line positionAtOffset: aPoint x using: storedGC ].
     ]
+
+    rectangleAtPosition: aPosition [
+	| index line |
+	lines ifNil: [^nil].
+	index := (BinarySearch
+		      findFirstThat: [:i |
+			  line := lines at: i.
+			  (aPosition <= line positionOffset)]
+		      between: 1
+		      and: lines size) - 1.
+	(index < 1) ifTrue: [^nil].
+	line := lines at: index.
+	^ storedGC saveWhile: [ line rectangleAtPosition: aPosition using: storedGC ]
+    ]
 ].
+
+"
+Object subclass: ParagraphEditor [
+    | point selection style |
+
+    point [ ^ point ]
+    point: aPositionIndex [ point := aPositionIndex ]
+    selection [ ^ selection ]
+    selection: anIntervalCollection [ selection := anIntervalCollection ]
+    style [ ^ style ]
+    style: aTextStyle [ style := aTextStyle ]
+
+"
