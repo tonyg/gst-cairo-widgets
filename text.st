@@ -82,23 +82,40 @@ Object subclass: SpanLine [
 		gc translateBy: each width @ 0]].
     ]
 
-    positionAtOffset: pointX [
+    positionAtOffset: pointX using: gc [
+	"Positions: nil for no-position, otherwise 1-based index of
+	the character whose face was clicked on."
 	| intraLinePosition userCoordOffset |
-	spans ifNil: [^nil].
-	(pointX < 0) ifTrue: [^nil].
 
-	intraLinePosition := 0.
+	spans ifNil: [^nil].
+	(pointX < 0) ifTrue: [^ self leftOfLeftmostPosition].
+
+	intraLinePosition := positionOffset.
 	userCoordOffset := 0.
 	spans do: [:span |
 	    ((pointX >= userCoordOffset) and: [(pointX - userCoordOffset) < span width])
 		ifTrue: [
 		    | intraSpanPosition |
-		    intraSpanPosition := span positionAtOffset: (pointX - userCoordOffset).
-		    intraSpanPosition ifNil: [^nil].
-		    ^ intraSpanPosition + intraLinePosition + positionOffset ].
+		    intraSpanPosition := span positionAtOffset: (pointX - userCoordOffset) using: gc.
+		    intraSpanPosition ifNil: [self error: 'Shouldn''t be able to get nil here'].
+		    ^ intraSpanPosition + intraLinePosition].
 	    intraLinePosition := intraLinePosition + span positionCount.
 	    userCoordOffset := userCoordOffset + span width].
-	^ positionOffset + positionCount + 1
+	^ self rightOfRightmostPosition
+    ]
+
+    leftOfLeftmostPosition [
+	"This is a separate method to permit different policies for
+	when the user clicks to the left of the leftmost character in
+	a span line."
+	^ nil
+    ]
+
+    rightOfRightmostPosition [
+	"This is a separate method to permit different policies for
+	when the user clicks to the right of the rightmost character
+	in a span line."
+	^ positionOffset + self totalPositionCount
     ]
 ].
 
@@ -152,28 +169,13 @@ Span subclass: TextSpan [
 	^ high - low + 1
     ]
 
-    withTemporaryGc: aBlock [
-	"Private. Invoke aBlock with a temporary graphics context that
-	can be used for computing text extents in my style. This is an
-	ugly kludge because of the requirement for a CairoContext in
-	order to compute font metrics using Cairo."
-
-	| gc |
-	gc := World current context.
-	gc saveWhile: [
-	    styledText style applyTo: gc.
-	    ^ aBlock value: gc].
-    ]
-
-    positionAtOffset: pointX [
-	| index leftX rightX |
-	self withTemporaryGc: [:gc |
-	    index := styledText indexUnder: pointX low: low high: high using: gc.
-	    leftX := (gc textExtents: (styledText string copyFrom: low to: index - 1)) advance x.
-	    rightX := (gc textExtents: (styledText string copyFrom: low to: index)) advance x.
-	    ((pointX - leftX) abs > (pointX - rightX) abs)
-		ifTrue: [^ index - low + 2]
-		ifFalse: [^ index - low + 1]]
+    positionAtOffset: pointX using: gc [
+	| pos |
+	styledText style applyTo: gc.
+	pos := (styledText indexUnder: pointX low: low high: high using: gc) - low + 1.
+	(pos > self positionCount)
+	    ifTrue: [self error: 'Can p really be greater than positionCount?'].
+	^ pos
     ]
 ].
 
@@ -324,16 +326,23 @@ Object subclass: Paragraph [
 	lines do: [:line | line topLine: origin positionOffset: positionOffset.
 			   origin := origin + line totalHeight.
 			   positionOffset := positionOffset + line totalPositionCount].
-	^ ParagraphComposition new initLines: lines
+	^ ParagraphComposition new initLines: lines gc: gc
     ]
 ].
 
 Object subclass: ParagraphComposition [
-    | lines |
+    | lines storedGC |
 
-    initLines: anOrderedCollection [
+    initLines: anOrderedCollection gc: aGC [
+	"We store the graphics context (actually a cairo context) as a
+	substitute for a separate text metrics computation
+	system. Ideally, the text metrics would be completely
+	independent of the particular graphics context chosen to
+	render to, instead being able to be kept with a more abstract
+	rasterisation of text."
+
 	lines := anOrderedCollection.
-    ]
+	storedGC := aGC.  ]
 
     renderOn: gc [
 	lines do: [:line |
@@ -350,6 +359,6 @@ Object subclass: ParagraphComposition [
 			       and: (lines size)) - 1.
 	line := lines at: index.
 	(aPoint y - line topLine) > line totalHeight ifTrue: [^nil].
-	^ line positionAtOffset: aPoint x.
+	^ storedGC saveWhile: [ line positionAtOffset: aPoint x using: storedGC ].
     ]
 ].

@@ -665,14 +665,6 @@ Object subclass: World [
     recogniser [ ^recogniser ]
     root [ ^root ]
 
-    context [
-	"Private and temporary. Should be only used by
-	TextSpan>>temporaryGc to obtain a CairoContext for computing
-	text extents. Once we can get hold of font metrics without a
-	CairoContext, this method should be removed."
-	^ context
-    ]
-
     initialize [
 	recogniser := GestureRecogniser new target: self.
 	Display eventSource handler: recogniser; startEventLoop.
