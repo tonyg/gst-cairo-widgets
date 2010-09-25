@@ -685,6 +685,8 @@ Object subclass: World [
     root [ ^root ]
 
     initialize [
+	root := RootWidget new.
+
 	recogniser := GestureRecogniser new target: self.
 	Display eventSource handler: recogniser; startEventLoop.
 
@@ -693,7 +695,6 @@ Object subclass: World [
 	invalidRect := nil.
 	refreshPauseCount := 0.
 
-	root := RootWidget new.
 	renderSemaphore name: 'World renderSemaphore'.
 
 	renderProcess := [ self renderLoop ] fork.
