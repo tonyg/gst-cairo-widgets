@@ -940,14 +940,19 @@ Eval [| r1 r2 r3 iw sp para tstyle |
 	(Box new
 	    extent: 50@50;
 	    translateBy: 50@400;
+	    painter: (RectanglePainter new fillColor: Cairo.Color red);
+	    setHandler: #selectClicked to: [sp stop]).
+    World current root addWidget:
+	(Box new
+	    extent: 50@50;
+	    translateBy: 100@400;
 	    painter: (RectanglePainter new fillColor: Cairo.Color green);
 	    setHandler: #selectClicked to: [sp start]).
     World current root addWidget:
 	(Box new
 	    extent: 50@50;
-	    translateBy: 100@400;
-	    painter: (RectanglePainter new fillColor: Cairo.Color red);
-	    setHandler: #selectClicked to: [sp stop]).
+	    translateBy: 150@400;
+	    painter: (RectanglePainter new fillColor: Cairo.Color blue)).
 
     World current root addWidget: (LabelWidget new
 				       resistsPickup: false;
