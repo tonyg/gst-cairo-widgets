@@ -28,7 +28,9 @@ SDL.SdlDisplay extend [
 ]
 
 SDL.SdlDisplay defaultFormat extent: 800@480; fullScreen: false.
-Smalltalk at: #Display put: SDL.SdlDisplay current.
+(SDL includesKey: #SdlGLDisplay)
+     ifTrue: [ Smalltalk at: #Display put: SDL.SdlGLDisplay current ]
+     ifFalse: [ Smalltalk at: #Display put: SDL.SdlDisplay current ].
 
 Object subclass: Widget [
     | painter deviceToLocalTransform parent properties |
@@ -679,7 +681,7 @@ PositionableWidget subclass: DemoWidget [
 ]
 
 Object subclass: World [
-    | context root recogniser renderSemaphore invalidRect refreshPauseCount renderProcess |
+    | cairoSurface context root recogniser renderSemaphore invalidRect refreshPauseCount renderProcess |
 
     recogniser [ ^recogniser ]
     root [ ^root ]
@@ -690,7 +692,15 @@ Object subclass: World [
 	recogniser := GestureRecogniser new target: self.
 	Display eventSource handler: recogniser; startEventLoop.
 
-	context := Cairo.CairoContext on: (Cairo.CairoSdlSurface on: Display).
+	cairoSurface := Cairo.CairoSdlSurface on: Display.
+
+	"We save away one long-lived context here, even though
+	we are creating and releasing a context each rerendering
+	by using withContextDo: below. The long-lived context is
+	saved away by ParagraphComposition for text metrics calculation.
+	Gross! FIXME"
+	context := Cairo.CairoContext on: cairoSurface.
+
 	renderSemaphore := Semaphore forMutualExclusion.
 	invalidRect := nil.
 	refreshPauseCount := 0.
@@ -750,14 +760,22 @@ Object subclass: World [
 		    ifFalse: [ r := invalidRect. invalidRect := nil ]].
 	    r ~~ nil ifTrue: [
 		Transcript << (Time millisecondsToRun: [
-		    Display critical: [
-			context
+                    cairoSurface withContextDo: [ :disposableContext |
+                        "We ignore the disposableContext and use our
+                        premade context instead, so that ParagraphComposition
+                        gets to keep an object that it can safely assume
+                        will outlive just this single rendering. The reason
+                        we call withContextDo: in the first place, rather
+                        than just Display>>critical:, is that Cairo SDL
+                        surfaces built on top of OpenGL need special treatment
+                        which is encapsulated in their withContextDo:
+                        implementation."
+                        context
 				resetClip;
 				newPath;
 				rectangle: (r rounded expandBy: 1);
 				clip.
-			context saveWhile: [root paintOn: context]].
-		    Display flip]); nl.
+			context saveWhile: [root paintOn: context]]]); nl.
 	    ].
 	    d wait.
 	] repeat.
