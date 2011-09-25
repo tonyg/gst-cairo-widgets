@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Add /usr/X11/lib to pick up libcairo.dylib.
+LTDL_LIBRARY_PATH=/usr/X11/lib gst buttondemo.st
