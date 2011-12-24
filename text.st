@@ -286,7 +286,7 @@ Object subclass: StyledText [
 
     packWidth: width low: lowerBound high: upperBound using: gc [
 	| index |
-	(lowerBound >= upperBound) ifTrue: [^nil].
+	(lowerBound > upperBound) ifTrue: [^nil].
 	index := (self indexUnder: width low: lowerBound high: upperBound using: gc) - 1.
 	(index < lowerBound) ifTrue: [^nil].
 	(self wordBreaksAfter: index upperBound: upperBound) ifFalse: [
