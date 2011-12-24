@@ -333,7 +333,7 @@ Object subclass: StyledText [
     ]
 ].
 
-String extend [
+CharacterArray extend [
     asStyledText [
 	^ self withStyle: nil
     ]
