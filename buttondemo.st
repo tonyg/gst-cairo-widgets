@@ -1170,7 +1170,7 @@ It was a dark and stormy night;  the rain fell in torrents--except at occasional
 	     paragraph: para;
 	     extent: 270@170;
 	     translateBy: 10@150;
-	     painter: (RectanglePainter new fillColor: Cairo.Color white)).
+	     painter: (RectanglePainter new fillColor: Cairo.Color white; borderWidth: 0.1)).
 
     World current root addWidget:
 	(TextWidget new
@@ -1179,7 +1179,7 @@ It was a dark and stormy night;  the rain fell in torrents--except at occasional
 paragraph'; yourself);
 	     extent: 270@170;
 	     translateBy: 310@150;
-	     painter: (RectanglePainter new fillColor: Cairo.Color white)).
+	     painter: (RectanglePainter new fillColor: Cairo.Color white; borderWidth: 0.1)).
 
     World current root painter: (RectanglePainter new
 				     borderWidth: 0;
