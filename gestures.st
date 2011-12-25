@@ -112,6 +112,7 @@ SDL.SdlEventHandler subclass: GestureRecogniser [
     target [ ^target ]
     target: aTarget [ target := aTarget ]
     activeHand [ ^activeHand ]
+    keyWidget [ ^keyWidget ]
 
     hover: which over: p [
 	| w |

@@ -161,6 +161,8 @@ Object subclass: Widget [
     keyPressed: sym unicode: unicodeCh modifiers: modifierSet []
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet []
 
+    isKeyWidget [^ World current recogniser keyWidget == self]
+
     setHandler: aSymbol to: aBlockOrDirectedMessage [
 	| handlers |
 	handlers := self propertyAt: #handlers ifAbsentPut: [Dictionary new].
@@ -606,8 +608,9 @@ PositionableWidget subclass: TextWidget [
 	Transcript << 'TW key   up: ' << sym printString << ' ' << unicodeCh printString << ' ' << modifierSet; nl.
     ]
 
-    lostCursor [ Transcript << 'TW lostCursor'; nl ]
-    gainedCursor [ Transcript << 'TW gainedCursor'; nl ]
+    "Invalidate to paint the caret disappearing and appearing."
+    lostCursor [ self invalidate ]
+    gainedCursor [ self invalidate ]
 
     clicked: aButtonNumber at: aPoint [
 	| pos |
@@ -621,6 +624,8 @@ PositionableWidget subclass: TextWidget [
     paintSelfOn: gc [
 	super paintSelfOn: gc.
 	self paintTextOn: gc.
+	(selectedPos notNil and: [self isKeyWidget])
+	    ifTrue: [self paintCaretOn: gc].
     ]
 
     paintTextOn: gc [
@@ -633,21 +638,24 @@ PositionableWidget subclass: TextWidget [
 	    composition := paragraph composeUsing: gc width: b width.
 	    composition renderOn: gc.
 	].
+    ]
 
-	selectedPos ifNotNil: [ | cursor |
-	    gc saveWhile: [
-		gc newPath.
-		gc source: (Cairo.Color blue withAlpha: 0.2).
-		(composition rectanglesBetween: selectedPos and: selectedPos + 1)
+    paintCaretOn: gc [
+	| caret |
+
+	gc saveWhile: [
+	    gc newPath.
+	    gc source: (Cairo.Color blue withAlpha: 0.2).
+	    (composition rectanglesBetween: selectedPos and: selectedPos + 1)
 		    do: [ :r | gc rectangle: r].
-		gc fill.
-	    ].
-	    cursor := composition rectangleAtPosition: selectedPos.
-	    cursor ifNotNil: [
-		gc saveWhile: [
-		    cursor := cursor expandBy: 1@2.
-		    gc newPath; source: (Cairo.Color black); rectangle: cursor; fill.
-		].
+	    gc fill.
+	].
+
+	caret := composition rectangleAtPosition: selectedPos.
+	caret ifNotNil: [
+	    gc saveWhile: [
+		caret := caret expandBy: 1@2.
+		gc newPath; source: (Cairo.Color black); rectangle: caret; fill.
 	    ].
 	].
     ]
