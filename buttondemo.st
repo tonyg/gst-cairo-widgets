@@ -588,7 +588,7 @@ PositionableWidget subclass: TextWidget [
     editable: aBoolean [ ^self propertyAt: #editable put: aBoolean checkingDefault: true ]
 
     keyPressed: sym unicode: unicodeCh modifiers: modifierSet [
-	Transcript << 'TW key down: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
+	Transcript << 'TW key down: ' << sym printString<< ' ' << unicodeCh printString << ' ' << modifierSet; nl.
 	unicodeCh asciiValue > 0 ifTrue: [
 	    selectedPos ifNotNil: [
 		Transcript << 'Would insert text ''' << unicodeCh <<
@@ -603,7 +603,7 @@ PositionableWidget subclass: TextWidget [
 	    ]].
     ]
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet [
-	Transcript << 'TW key   up: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
+	Transcript << 'TW key   up: ' << sym printString << ' ' << unicodeCh printString << ' ' << modifierSet; nl.
     ]
 
     lostCursor [ Transcript << 'TW lostCursor'; nl ]
