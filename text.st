@@ -211,6 +211,15 @@ Span subclass: TextSpan [
 	^ styledText string copyFrom: low to: high
     ]
 
+    trimmedFragment [
+	"Fragment, with whitespace (separators) on the right trimmed."
+	| f |
+	f := self fragment.
+	f size to: 1 by: -1 do: [:i |
+	    (f at: i) isSeparator ifFalse: [^ f copyFrom: 1 to: i]].
+	^ String new
+    ]
+
     width [
 	^ extents advance x
     ]
@@ -230,7 +239,7 @@ Span subclass: TextSpan [
     renderSpanOn: gc [
 	styledText style applyTo: gc.
 	"gc saveWhile: [ gc moveTo: 0@0; relLineTo: 3@3; stroke ]."
-	gc showText: self fragment.
+	gc showText: self trimmedFragment.
     ]
 
     glyphCount [
