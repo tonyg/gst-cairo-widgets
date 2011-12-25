@@ -577,8 +577,10 @@ Object subclass: ParagraphComposition [
 
     positionBelow: position [
 	| index x |
-	index := self lineIndexAtPosition: position ifAbsent: [^ self maxPosition].
+	index := self lineIndexAtPosition: position ifAbsent: [1].
+	lines isEmpty ifTrue: [^ self maxPosition].
 	x := (lines at: index) offsetAtPosition: position using: storedGC.
+	x ifNil: [^ self maxPosition].
 	index := index + 1.
 	index > lines size ifTrue: [^ self maxPosition].
 	^ (lines at: index) positionAtOffset: x using: storedGC
@@ -586,8 +588,10 @@ Object subclass: ParagraphComposition [
 
     positionAbove: position [
 	| index x |
-	index := self lineIndexAtPosition: position ifAbsent: [^ self minPosition].
+	index := self lineIndexAtPosition: position ifAbsent: [lines size].
+	lines isEmpty ifTrue: [^ self minPosition].
 	x := (lines at: index) offsetAtPosition: position using: storedGC.
+	x ifNil: [^ self minPosition].
 	index := index - 1.
 	index < 1 ifTrue: [^ self minPosition].
 	^ (lines at: index) positionAtOffset: x using: storedGC
