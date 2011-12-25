@@ -145,4 +145,10 @@ SDL.SdlEventHandler subclass: GestureRecogniser [
     handleWMQuitRequest [
 	target handleWMQuitRequest.
     ]
+
+    handleExpose [
+	"I don't know why this isn't being called. Some interaction between SDL and OpenGL??"
+	"http://forums.libsdl.org/viewtopic.php?p=4858&sid=a2538a3e0200b172a730fc5ca17cf569"
+	target handleExpose.
+    ]
 ].

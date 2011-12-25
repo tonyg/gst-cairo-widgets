@@ -938,6 +938,10 @@ Object subclass: World [
     handleWMQuitRequest [
 	ObjectMemory quit.
     ]
+
+    handleExpose [
+	self root invalidate.
+    ]
 ].
 
 Cairo.CairoContext extend [
