@@ -572,7 +572,7 @@ FilledBorderedPainter subclass: RoundedRectanglePainter [
 ].
 
 PositionableWidget subclass: TextWidget [
-    | paragraph extent composition selectedPos selectedRect |
+    | paragraph extent composition selectedPos |
 
     paragraph [ ^paragraph ]
     paragraph: aParagraph [ paragraph := aParagraph ]
@@ -590,8 +590,9 @@ PositionableWidget subclass: TextWidget [
     keyPressed: sym unicode: unicodeCh modifiers: modifierSet [
 	Transcript << 'TW key down: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
 	unicodeCh asciiValue > 0 ifTrue: [
-	    selectedRect ifNotNil: [
-		Transcript << 'Would insert text ''' << unicodeCh << '''.'; nl]].
+	    selectedPos ifNotNil: [
+		Transcript << 'Would insert text ''' << unicodeCh <<
+		    ''' at position ' << selectedPos << '.'; nl]].
     ]
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet [
 	Transcript << 'TW key   up: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.
@@ -605,8 +606,6 @@ PositionableWidget subclass: TextWidget [
 	Transcript << 'TW clicked: ' << aButtonNumber << ' at: ' << aPoint; nl.
 	Transcript << '   position: ' << (pos := composition positionAtPoint: aPoint); nl.
 	selectedPos := pos.
-	pos ifNil: [selectedRect := nil]
-	    ifNotNil: [selectedRect := (composition rectangleAtPosition: pos)].
 	self invalidate.
 	^ super clicked: aButtonNumber at: aPoint.
     ]
@@ -627,11 +626,20 @@ PositionableWidget subclass: TextWidget [
 	    composition renderOn: gc.
 	].
 
-	selectedRect ifNotNil: [
+	selectedPos ifNotNil: [ | cursor |
 	    gc saveWhile: [
 		gc newPath.
 		gc source: (Cairo.Color blue withAlpha: 0.2).
-		gc rectangle: selectedRect; fill.
+		(composition rectanglesBetween: selectedPos and: selectedPos + 1)
+		    do: [ :r | gc rectangle: r].
+		gc fill.
+	    ].
+	    cursor := composition rectangleAtPosition: selectedPos.
+	    cursor ifNotNil: [
+		gc saveWhile: [
+		    cursor := cursor expandBy: 1@2.
+		    gc newPath; source: (Cairo.Color black); rectangle: cursor; fill.
+		].
 	    ].
 	].
     ]

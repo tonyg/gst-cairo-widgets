@@ -43,35 +43,56 @@ TextStyle class extend [
     default: aStyle [ defaultStyle := aStyle ]
 ].
 
+"
+Positions name *boundaries* between characters.
+
+   +---+---+---+---+---+
+   | H | e | l | l | o |
+   +---+---+---+---+---+
+     1   2   3   4   5    = character indexes
+   0   1   2   3   4   5  = positions
+
+A position of nil indicates no position at all.
+
+Invariants:
+ - position >= 0
+ - position <= text length
+ - there are (text length) + 1 positions
+
+A 'Glyph' here indicates a selectable atomic piece of text. For the
+purposes of this code, things like embedded inline images count as
+Glyphs.
+"
+
 Object subclass: SpanLine [
-    | spans positionCount width baselineOffset leading height topLine positionOffset |
+    | spans glyphCount width baselineOffset leading height topLine firstPosition |
 
     topLine [ ^topLine ]
-    positionOffset [ ^positionOffset ]
-    topLine: topLineNumber positionOffset: positionOffsetNumber [
+    firstPosition [ ^firstPosition ]
+    topLine: topLineNumber firstPosition: firstPositionNumber [
 	"Private. Set various accumulated positions for this object."
 	topLine := topLineNumber.
-	positionOffset := positionOffsetNumber.
+	firstPosition := firstPositionNumber.
     ]
 
     addSpan: aSpan [
 	spans ifNil: [
 	    spans := OrderedCollection new.
-	    positionCount := 0.
+	    glyphCount := 0.
 	    width := 0.
 	    baselineOffset := 0.
 	    leading := 0.
 	    height := 0].
 	spans add: aSpan.
-	positionCount := positionCount + aSpan positionCount.
+	glyphCount := glyphCount + aSpan glyphCount.
 	width := width + aSpan width.
 	baselineOffset := baselineOffset max: aSpan baselineOffset.
 	leading := leading max: aSpan leading.
 	height := height max: aSpan height.
     ]
 
-    totalPositionCount [
-	^ positionCount ifNil: [ 0 ]
+    totalGlyphCount [
+	^ glyphCount ifNil: [ 0 ]
     ]
 
     totalWidth [
@@ -80,6 +101,10 @@ Object subclass: SpanLine [
 
     totalHeight [
 	^ spans ifNil: [ 0 ] ifNotNil: [ height + leading ]
+    ]
+
+    lastPosition [
+	^ firstPosition + self totalGlyphCount
     ]
 
     renderOn: gc [
@@ -93,23 +118,25 @@ Object subclass: SpanLine [
     ]
 
     positionAtOffset: pointX using: gc [
-	"Positions: nil for no-position, otherwise 1-based index of
-	the character whose face was clicked on."
+	"Positions: nil for no-position, otherwise 0-based index of
+	the boundary between characters closest to the click
+	position."
 	| intraLinePosition userCoordOffset |
 
 	spans ifNil: [^nil].
 	(pointX < 0) ifTrue: [^ self leftOfLeftmostPosition].
 
-	intraLinePosition := positionOffset.
+	intraLinePosition := firstPosition.
 	userCoordOffset := 0.
 	spans do: [:span |
 	    ((pointX >= userCoordOffset) and: [(pointX - userCoordOffset) < span width])
 		ifTrue: [
 		    | intraSpanPosition |
-		    intraSpanPosition := span positionAtOffset: (pointX - userCoordOffset) using: gc.
+		    intraSpanPosition :=
+			span positionAtOffset: (pointX - userCoordOffset) using: gc.
 		    intraSpanPosition ifNil: [self error: 'Shouldn''t be able to get nil here'].
 		    ^ intraSpanPosition + intraLinePosition].
-	    intraLinePosition := intraLinePosition + span positionCount.
+	    intraLinePosition := intraLinePosition + span glyphCount.
 	    userCoordOffset := userCoordOffset + span width].
 	^ self rightOfRightmostPosition
     ]
@@ -125,29 +152,32 @@ Object subclass: SpanLine [
 	"This is a separate method to permit different policies for
 	when the user clicks to the right of the rightmost character
 	in a span line."
-	^ positionOffset + self totalPositionCount
+	^ self lastPosition
     ]
 
-    rectangleAtPosition: aPosition using: gc [
-	| intraLinePosition userCoordOffset spanCount r |
+    offsetAtPosition: position using: gc [
+	"Returns the X coordinate of the given 0-based position."
+	| intraLinePosition userCoordOffset spanCount |
 
 	spans ifNil: [^nil].
 
-	intraLinePosition := positionOffset.
+	intraLinePosition := firstPosition.
 	userCoordOffset := 0.
 	spans do: [:span |
-	    spanCount := aPosition - intraLinePosition.
-	    ((aPosition >= intraLinePosition) and: [spanCount <= span positionCount])
-		ifTrue: [
-		    r := span rectangleAtPosition: spanCount
-			      using: gc
-			      top: self topLine
-			      bottom: self topLine + self totalHeight.
-		    r moveBy: userCoordOffset@0.
-		    ^ r].
-	    intraLinePosition := intraLinePosition + span positionCount.
+	    spanCount := position - intraLinePosition.
+	    ((spanCount >= 0) and: [spanCount <= span glyphCount])
+		ifTrue: [^ (span offsetAtPosition: spanCount using: gc) + userCoordOffset].
+	    intraLinePosition := intraLinePosition + span glyphCount.
 	    userCoordOffset := userCoordOffset + span width].
 	^ nil
+    ]
+
+    rectangleBetween: lowPosition and: highPosition using: gc [
+	"Returns the rectangle completely the line between the two positions."
+	| top |
+	top := self topLine.
+	^ (self offsetAtPosition: lowPosition using: gc)@top
+	    corner: (self offsetAtPosition: highPosition using: gc)@(top + self totalHeight)
     ]
 ].
 
@@ -157,9 +187,9 @@ Object subclass: Span [
     leading [ self subclassResponsibility ]
     height [ self subclassResponsibility ]
     renderSpanOn: gc [ self subclassResponsibility ]
-    positionCount [ self subclassResponsibility ]
+    glyphCount [ self subclassResponsibility ]
     positionAtOffset: pointX [ self subclassResponsibility ]
-    rectangleAtPosition: p using: gc top: top bottom: bottom [ self subclassResponsibility ]
+    offsetAtPosition: position using: gc [ self subclassResponsibility ]
 ].
 
 Span subclass: TextSpan [
@@ -198,26 +228,22 @@ Span subclass: TextSpan [
 	gc showText: self fragment.
     ]
 
-    positionCount [
+    glyphCount [
 	^ high - low + 1
     ]
 
     positionAtOffset: pointX using: gc [
 	| pos |
 	styledText style applyTo: gc.
-	pos := (styledText indexUnder: pointX low: low high: high using: gc) - low + 1.
-	(pos > self positionCount)
-	    ifTrue: [self error: 'Can p really be greater than positionCount?'].
+	pos := (styledText positionUnder: pointX low: low high: high using: gc) - low + 1.
+	(pos > self glyphCount)
+	    ifTrue: [self error: 'Can p really be greater than glyphCount?'].
 	^ pos
     ]
 
-    rectangleAtPosition: p using: gc top: top bottom: bottom [
-	| s left right |
+    offsetAtPosition: position using: gc [
 	styledText style applyTo: gc.
-	s := styledText string.
-	left := (gc textExtents: (s copyFrom: low to: low + p - 2)) advance x.
-	right := (gc textExtents: (s copyFrom: low to: low + p - 1)) advance x.
-	^ left@top corner: right@bottom
+	^ (gc textExtents: (styledText string copyFrom: low to: low + position - 1)) advance x
     ]
 ].
 
@@ -282,6 +308,31 @@ Object subclass: StyledText [
 			[(gc textExtents: (string copyFrom: lowerBound to: i)) advance x > pointX]]
 		between: lowerBound
 		and: upperBound
+    ]
+
+    glyphMidpoint: glyphIndex relativeTo: lowerBound using: gc [
+	"Accepts glyphIndexes not only 1..(string size), but outside
+	this range. Answers the left-hand or right-hand coordinates in
+	that case."
+	| lhs rhs |
+	glyphIndex < lowerBound ifTrue: [^ 0].
+	glyphIndex > string size ifTrue: [^ (gc textExtents: string) advance x].
+	lhs := (gc textExtents: (string copyFrom: lowerBound to: glyphIndex - 1)) advance x.
+	rhs := (gc textExtents: (string copyFrom: lowerBound to: glyphIndex)) advance x.
+	^ (lhs + rhs) // 2
+    ]
+
+    positionUnder: pointX low: lowerBound high: upperBound using: gc [
+	"lowerBound and upperBound are glyph indexes. Answers a
+	position, though, not a glyph index; for the glyph index
+	variant, see indexUnder:low:high:using:."
+	^ BinarySearch
+		findFirstThat: [:i |
+		    "i is a position, not a glyph index."
+		    (i > upperBound) or:
+			[(self glyphMidpoint: i + 1 relativeTo: lowerBound using: gc) > pointX]]
+		between: lowerBound - 1 "position to the left of glyph lowerBound"
+		and: upperBound "position to the right of glyph upperBound"
     ]
 
     packWidth: width low: lowerBound high: upperBound using: gc [
@@ -353,8 +404,20 @@ Object subclass: Paragraph [
 	items add: aStringOrText asStyledText.
     ]
 
+    insert: aStringOrText atPosition: position [
+    ]
+
+    zipToPosition: position [
+	"TODO: Make this use BinarySearch. Perhaps keep an accumulated
+	 count? Ultimately, some kind of rope-like structure would be
+	 ideal."
+	| index accumulator |
+	index := 1.
+	accumulator := 1.
+    ]
+
     composeUsing: gc width: width [
-	| lines origin positionOffset |
+	| lines origin firstPosition |
 	gc saveWhile: [
 	    gc newPath.
 	    lines := OrderedCollection new.
@@ -364,10 +427,10 @@ Object subclass: Paragraph [
 	    lines last totalWidth = 0 ifTrue: [lines := lines allButLast].
 	].
 	origin := 0.
-	positionOffset := 0.
-	lines do: [:line | line topLine: origin positionOffset: positionOffset.
+	firstPosition := 0.
+	lines do: [:line | line topLine: origin firstPosition: firstPosition.
 			   origin := origin + line totalHeight.
-			   positionOffset := positionOffset + line totalPositionCount].
+			   firstPosition := firstPosition + line totalGlyphCount].
 	^ ParagraphComposition new initLines: lines gc: gc
     ]
 ].
@@ -400,23 +463,54 @@ Object subclass: ParagraphComposition [
 			       between: 1
 			       and: (lines size)) - 1.
 	line := lines at: index.
-	((aPoint y - line topLine) > line totalHeight)
-		ifTrue: [^ line positionOffset + line totalPositionCount].
+	((aPoint y - line topLine) > line totalHeight) ifTrue: [^ line lastPosition].
 	^ storedGC saveWhile: [ line positionAtOffset: aPoint x using: storedGC ].
     ]
 
-    rectangleAtPosition: aPosition [
-	| index line |
-	lines ifNil: [^nil].
+    rectangleAtPosition: position [
+	| index line x |
+
+	index := (BinarySearch
+		      findFirstThat: [:i | (lines at: i) lastPosition >= position]
+		      between: 1
+		      and: lines size).
+	index > lines size ifTrue: [^nil].
+	line := lines at: index.
+	x := line offsetAtPosition: position using: storedGC.
+	^ x@(line topLine) extent: 0@(line totalHeight)
+    ]
+
+    rectanglesBetween: lowPosition and: highPosition [
+	"Answers a collection of rectangles covering all glyphs
+	between the two given positions."
+	| rs index line lhs rhs |
+
+	rs := OrderedCollection new.
+	lines ifNil: [^ rs].
+	"Find the first line *past* the first line we might want to
+	have a rectangle for."
 	index := (BinarySearch
 		      findFirstThat: [:i |
 			  line := lines at: i.
-			  (aPosition <= line positionOffset)]
+			  (lowPosition < line firstPosition)]
 		      between: 1
 		      and: lines size) - 1.
-	(index < 1) ifTrue: [^nil].
-	line := lines at: index.
-	^ storedGC saveWhile: [ line rectangleAtPosition: aPosition using: storedGC ]
+	(index < 1) ifTrue: [
+	    "If the search found the first line, then there are no
+	    lines we might possibly want to examine, since we were
+	    looking for the first line past the onset of the region of
+	    interest."
+	    ^ rs].
+	[ index <= lines size and: [line := lines at: index.
+				    highPosition > line firstPosition] ]
+	    whileTrue: [
+		lhs := lowPosition max: line firstPosition.
+		rhs := highPosition min: line lastPosition.
+		rs add: (storedGC saveWhile: [ line rectangleBetween: lhs
+						    and: rhs
+						    using: storedGC ]).
+		index := index + 1].
+	^ rs
     ]
 ].
 
