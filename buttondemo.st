@@ -592,7 +592,15 @@ PositionableWidget subclass: TextWidget [
 	unicodeCh asciiValue > 0 ifTrue: [
 	    selectedPos ifNotNil: [
 		Transcript << 'Would insert text ''' << unicodeCh <<
-		    ''' at position ' << selectedPos << '.'; nl]].
+		    ''' (' << unicodeCh asciiValue <<
+		    ') at position ' << selectedPos << '.'; nl.
+		paragraph :=
+		    (paragraph zipToPosition: selectedPos)
+		      insert: unicodeCh asString; "TODO: asUnicodeString. Need UTF8 codec"
+		      unzip.
+		selectedPos := selectedPos + 1.
+		self invalidate.
+	    ]].
     ]
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet [
 	Transcript << 'TW key   up: ' << sym << ' ' << unicodeCh << ' ' << modifierSet; nl.

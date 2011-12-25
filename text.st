@@ -284,6 +284,11 @@ Object subclass: StyledText [
 	^ self
     ]
 
+    copyFrom: a to: b [ ^ StyledText new string: (string copyFrom: a to: b); style: style ]
+    copyFrom: a [ ^ StyledText new string: (string copyFrom: a); style: style ]
+
+    , aString [ ^ StyledText new string: (string, aString); style: style ]
+
     wordBreaksAfter: index upperBound: upperBound [
 	^ (index = upperBound) or: [
 	    (string at: index) isSeparator or: [
@@ -346,7 +351,7 @@ Object subclass: StyledText [
     ]
 
     lineEndAfter: start [
-	^ (string indexOf: Character lf startingAt: start ifAbsent: [string size + 1]) - 1
+	^ string indexOf: Character lf startingAt: start ifAbsent: [^ string size]
     ]
 
     pack: lines intoWidth: width using: gc [
@@ -379,7 +384,7 @@ Object subclass: StyledText [
 		    ifFalse: [ lines add: SpanLine new ]].
 	    (lineEnd < string size)
 		ifTrue: [ lines add: SpanLine new ].
-	    lineStart := lineEnd + 2.
+	    lineStart := lineEnd + 1.
 	]
     ]
 ].
@@ -394,10 +399,36 @@ CharacterArray extend [
     ]
 ].
 
+Object subclass: ParagraphCursor [
+    "I am a zipper pointing into a paragraph."
+    | itemsL itemsR itemL itemR |
+
+    on: items item: itemIndex offset: itemPosition [
+	itemsL := items copyFrom: 1 to: itemIndex - 1.
+	itemsR := items copyFrom: itemIndex + 1.
+	itemL := (items at: itemIndex) copyFrom: 1 to: itemPosition.
+	itemR := (items at: itemIndex) string copyFrom: itemPosition + 1.
+    ]
+
+    insert: aString [
+	itemL := itemL, aString.
+    ]
+
+    unzip [
+	| items |
+	items := itemsL, (Array with: (itemL, itemR)), itemsR.
+	^ Paragraph new initItems: items
+    ]
+].
+
 Object subclass: Paragraph [
     | items |
 
     items [ ^ items ifNil: [ #() ] ]
+
+    initItems: initItems [
+	items := initItems
+    ]
 
     append: aStringOrText [
 	items ifNil: [items := OrderedCollection new].
@@ -407,13 +438,28 @@ Object subclass: Paragraph [
     insert: aStringOrText atPosition: position [
     ]
 
+    zipToStart [
+	^ ParagraphCursor new on: items item: 1 offset: 0
+    ]
+
+    zipToEnd [
+	^ ParagraphCursor new on: items item: items size offset: items last size
+    ]
+
     zipToPosition: position [
 	"TODO: Make this use BinarySearch. Perhaps keep an accumulated
 	 count? Ultimately, some kind of rope-like structure would be
 	 ideal."
-	| index accumulator |
-	index := 1.
-	accumulator := 1.
+	"Invariant: on the split between two items, prefers to index
+	 into the lower-indexed item."
+	| lhs rhs |
+	lhs := 0.
+	items doWithIndex: [:item :index |
+	    rhs := lhs + item string size.
+	    position <= rhs ifTrue: [
+		^ ParagraphCursor new on: items item: index offset: (position - lhs)].
+	    lhs := rhs].
+	^ self zipToEnd
     ]
 
     composeUsing: gc width: width [
