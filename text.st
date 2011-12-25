@@ -440,21 +440,23 @@ Object subclass: ParagraphCursor [
     ]
 
     deleteLeft [
-	itemL size > 0 ifTrue: [itemL := itemL allButLast. ^self].
-	itemsL size = 0 ifTrue: [^self].
+	itemL size > 0 ifTrue: [itemL := itemL allButLast. ^ true].
+	itemsL size = 0 ifTrue: [^ false].
 	self finishItem: [:i | itemsR add: i beforeIndex: 1].
 	itemL := itemsL last allButLast.
 	itemR := String new.
 	itemsL := itemsL allButLast.
+	^ true
     ]
 
     deleteRight [
-	itemR size > 0 ifTrue: [itemR := itemR allButFirst. ^self].
-	itemsR size = 0 ifTrue: [^self].
+	itemR size > 0 ifTrue: [itemR := itemR allButFirst. ^ true].
+	itemsR size = 0 ifTrue: [^ false].
 	self finishItem: [:i | itemsL add: i].
 	itemL := StyledText new string: String new; style: itemsR first style.
 	itemR := itemsR first string allButFirst.
 	itemsR := itemsR allButFirst.
+	^ true
     ]
 
     unzip [

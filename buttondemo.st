@@ -707,8 +707,7 @@ PositionableWidget subclass: TextWidget [
 
     deleteLeft [
 	self editBy: [:c |
-	    c deleteLeft.
-	    selectedPos := selectedPos - 1]
+	    c deleteLeft ifTrue: [selectedPos := selectedPos - 1]]
     ]
 
     deleteRight [
