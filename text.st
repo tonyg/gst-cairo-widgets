@@ -109,7 +109,7 @@ Object subclass: SpanLine [
 
     lastSelectablePosition [
 	(spans isNil or: [spans isEmpty]) ifTrue: [ ^ firstPosition ].
-	^ spans last endsInSeparator
+	^ spans last endsInNewline
 	    ifTrue: [self lastPosition - 1]
 	    ifFalse: [self lastPosition]
     ]
@@ -197,7 +197,7 @@ Object subclass: Span [
     glyphCount [ self subclassResponsibility ]
     positionAtOffset: pointX [ self subclassResponsibility ]
     offsetAtPosition: position using: gc [ self subclassResponsibility ]
-    endsInSeparator [ self subclassResponsibility ]
+    endsInNewline [ self subclassResponsibility ]
 ].
 
 Span subclass: TextSpan [
@@ -263,9 +263,9 @@ Span subclass: TextSpan [
 	^ (gc textExtents: (styledText string copyFrom: low to: low + position - 1)) advance x
     ]
 
-    endsInSeparator [
+    endsInNewline [
 	self glyphCount > 0 ifFalse: [^ false].
-	^ (styledText string at: high) isSeparator
+	^ (styledText string at: high) = Character lf
     ]
 ].
 
