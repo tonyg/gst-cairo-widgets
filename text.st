@@ -108,8 +108,10 @@ Object subclass: SpanLine [
     ]
 
     lastSelectablePosition [
-	"TODO: treat line-ending newline differently here?"
-	^ self lastPosition
+	(spans isNil or: [spans isEmpty]) ifTrue: [ ^ firstPosition ].
+	^ spans last endsInSeparator
+	    ifTrue: [self lastPosition - 1]
+	    ifFalse: [self lastPosition]
     ]
 
     renderOn: gc [
@@ -195,6 +197,7 @@ Object subclass: Span [
     glyphCount [ self subclassResponsibility ]
     positionAtOffset: pointX [ self subclassResponsibility ]
     offsetAtPosition: position using: gc [ self subclassResponsibility ]
+    endsInSeparator [ self subclassResponsibility ]
 ].
 
 Span subclass: TextSpan [
@@ -258,6 +261,11 @@ Span subclass: TextSpan [
     offsetAtPosition: position using: gc [
 	styledText style applyTo: gc.
 	^ (gc textExtents: (styledText string copyFrom: low to: low + position - 1)) advance x
+    ]
+
+    endsInSeparator [
+	self glyphCount > 0 ifFalse: [^ false].
+	^ (styledText string at: high) isSeparator
     ]
 ].
 
@@ -564,7 +572,7 @@ Object subclass: ParagraphComposition [
     lineIndexAtPosition: position ifAbsent: aBlock [
 	| index |
 	index := (BinarySearch
-		      findFirstThat: [:i | (lines at: i) lastPosition >= position]
+		      findFirstThat: [:i | (lines at: i) lastPosition > position]
 		      between: 1
 		      and: lines size).
 	index > lines size ifTrue: [^ aBlock value].
@@ -572,7 +580,9 @@ Object subclass: ParagraphComposition [
     ]
 
     lineAtPosition: position [
-	^ lines at: (self lineIndexAtPosition: position ifAbsent: [^nil])
+	^ lines at: (self lineIndexAtPosition: position ifAbsent: [
+	    lines isEmpty ifTrue: [^ nil].
+	    ^ lines last])
     ]
 
     positionBelow: position [
