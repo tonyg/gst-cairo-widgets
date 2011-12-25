@@ -107,6 +107,11 @@ Object subclass: SpanLine [
 	^ firstPosition + self totalGlyphCount
     ]
 
+    lastSelectablePosition [
+	"TODO: treat line-ending newline differently here?"
+	^ self lastPosition
+    ]
+
     renderOn: gc [
 	spans ifNil: [^self].
 	gc newPath.
@@ -152,7 +157,7 @@ Object subclass: SpanLine [
 	"This is a separate method to permit different policies for
 	when the user clicks to the right of the rightmost character
 	in a span line."
-	^ self lastPosition
+	^ self lastSelectablePosition
     ]
 
     offsetAtPosition: position using: gc [
@@ -284,10 +289,15 @@ Object subclass: StyledText [
 	^ self
     ]
 
-    copyFrom: a to: b [ ^ StyledText new string: (string copyFrom: a to: b); style: style ]
-    copyFrom: a [ ^ StyledText new string: (string copyFrom: a); style: style ]
+    size [ ^ string size ]
 
-    , aString [ ^ StyledText new string: (string, aString); style: style ]
+    copyFrom: a to: b [ ^ self copy string: (string copyFrom: a to: b) ]
+    copyFrom: a [ ^ self copy string: (string copyFrom: a) ]
+
+    , aString [ ^ self copy string: (string, aString) ]
+
+    allButFirst [ ^ self copy string: (string allButFirst) ]
+    allButLast [ ^ self copy string: (string allButLast) ]
 
     wordBreaksAfter: index upperBound: upperBound [
 	^ (index = upperBound) or: [
@@ -414,6 +424,30 @@ Object subclass: ParagraphCursor [
 	itemL := itemL, aString.
     ]
 
+    finishItem: aBlock [
+	| i |
+	i := itemL, itemR.
+	i size > 0 ifTrue: [aBlock value: i]
+    ]
+
+    deleteLeft [
+	itemL size > 0 ifTrue: [itemL := itemL allButLast. ^self].
+	itemsL size = 0 ifTrue: [^self].
+	self finishItem: [:i | itemsR add: i beforeIndex: 1].
+	itemL := itemsL last allButLast.
+	itemR := String new.
+	itemsL := itemsL allButLast.
+    ]
+
+    deleteRight [
+	itemR size > 0 ifTrue: [itemR := itemR allButFirst. ^self].
+	itemsR size = 0 ifTrue: [^self].
+	self finishItem: [:i | itemsL add: i].
+	itemL := StyledText new string: String new; style: itemsR first style.
+	itemR := itemsR first string allButFirst.
+	itemsR := itemsR allButFirst.
+    ]
+
     unzip [
 	| items |
 	items := itemsL, (Array with: (itemL, itemR)), itemsR.
@@ -435,9 +469,6 @@ Object subclass: Paragraph [
 	items add: aStringOrText asStyledText.
     ]
 
-    insert: aStringOrText atPosition: position [
-    ]
-
     zipToStart [
 	^ ParagraphCursor new on: items item: 1 offset: 0
     ]
@@ -455,7 +486,7 @@ Object subclass: Paragraph [
 	| lhs rhs |
 	lhs := 0.
 	items doWithIndex: [:item :index |
-	    rhs := lhs + item string size.
+	    rhs := lhs + item size.
 	    position <= rhs ifTrue: [
 		^ ParagraphCursor new on: items item: index offset: (position - lhs)].
 	    lhs := rhs].
@@ -509,19 +540,52 @@ Object subclass: ParagraphComposition [
 			       between: 1
 			       and: (lines size)) - 1.
 	line := lines at: index.
-	((aPoint y - line topLine) > line totalHeight) ifTrue: [^ line lastPosition].
+	((aPoint y - line topLine) > line totalHeight) ifTrue: [^ line lastSelectablePosition].
 	^ storedGC saveWhile: [ line positionAtOffset: aPoint x using: storedGC ].
     ]
 
-    rectangleAtPosition: position [
-	| index line x |
+    minPosition [ ^ 0 ]
+    maxPosition [
+	lines isEmpty ifTrue: [ ^ 0 ].
+	^ lines last lastSelectablePosition
+    ]
 
+    lineIndexAtPosition: position ifAbsent: aBlock [
+	| index |
 	index := (BinarySearch
 		      findFirstThat: [:i | (lines at: i) lastPosition >= position]
 		      between: 1
 		      and: lines size).
-	index > lines size ifTrue: [^nil].
-	line := lines at: index.
+	index > lines size ifTrue: [^ aBlock value].
+	^ index
+    ]
+
+    lineAtPosition: position [
+	^ lines at: (self lineIndexAtPosition: position ifAbsent: [^nil])
+    ]
+
+    positionBelow: position [
+	| index x |
+	index := self lineIndexAtPosition: position ifAbsent: [^ self maxPosition].
+	x := (lines at: index) offsetAtPosition: position using: storedGC.
+	index := index + 1.
+	index > lines size ifTrue: [^ self maxPosition].
+	^ (lines at: index) positionAtOffset: x using: storedGC
+    ]
+
+    positionAbove: position [
+	| index x |
+	index := self lineIndexAtPosition: position ifAbsent: [^ self minPosition].
+	x := (lines at: index) offsetAtPosition: position using: storedGC.
+	index := index - 1.
+	index < 1 ifTrue: [^ self minPosition].
+	^ (lines at: index) positionAtOffset: x using: storedGC
+    ]
+
+    rectangleAtPosition: position [
+	| line x |
+	line := self lineAtPosition: position.
+	line ifNil: [^nil].
 	x := line offsetAtPosition: position using: storedGC.
 	^ x@(line topLine) extent: 0@(line totalHeight)
     ]

@@ -32,6 +32,58 @@ SDL.SdlDisplay defaultFormat extent: 800@480; fullScreen: false.
      ifTrue: [ Smalltalk at: #Display put: SDL.SdlGLDisplay current ]
      ifFalse: [ Smalltalk at: #Display put: SDL.SdlDisplay current ].
 
+Object subclass: KeyDescription [
+    | sym modifiers |
+    sym [ ^sym ]
+    sym: aKeySym [ sym := aKeySym ]
+    modifiers [
+	modifiers ifNil: [modifiers := Set new].
+	^ modifiers
+    ]
+    modifiers: aSet [
+	modifiers := Set new.
+	#(#shift #ctrl #alt #meta) do: [:s | (aSet includes: s) ifTrue: [modifiers add: s]]
+    ]
+
+    printOn: aStream [
+	super printOn: aStream.
+	aStream nextPut: $(.
+	sym printOn: aStream.
+	modifiers asArray printOn: aStream.
+	aStream nextPut: $).
+    ]
+
+    hash [ ^ sym hash bitXor: self modifiers hash ]
+    = aKeyDescription [
+	^ sym = aKeyDescription sym and: [self modifiers = aKeyDescription modifiers ]
+    ]
+
+    KeyDescription class >> fromString: aString [
+	| dashPos prefix result remainder |
+	result := self new.
+	remainder := aString.
+	[ dashPos := remainder indexOf: $- ifAbsent: [0]. dashPos > 0 ] whileTrue: [
+	    prefix := (remainder copyFrom: 1 to: dashPos - 1) asUppercase.
+	    remainder := remainder copyFrom: dashPos + 1.
+	    prefix = 'C' ifTrue: [ result modifiers add: #ctrl ].
+	    prefix = 'S' ifTrue: [ result modifiers add: #shift ].
+	    prefix = 'A' ifTrue: [ result modifiers add: #alt ].
+	    prefix = 'M' ifTrue: [ result modifiers add: #meta ].
+	].
+	(remainder size > 1)
+	    ifTrue: [ | n |
+			n := remainder asInteger.
+			"Matches definition in EventSource.st :-/"
+			result sym: (n > 127 ifTrue: [n] ifFalse: [Character value: n])]
+	    ifFalse: [ result sym: remainder first ].
+	^ result
+    ]
+
+    bind: selector in: map [
+	map at: self copy put: selector
+    ]
+].
+
 Object subclass: Widget [
     | painter deviceToLocalTransform parent properties |
 
@@ -157,8 +209,20 @@ Object subclass: Widget [
     buttonReleased: aButtonNumber at: aPoint over: aWidget []
     allButtonsReleasedAt: aPoint over: aWidget []
 
+    keymap [ ^ self class keymap ]
+    dispatchKey: keyDesc unicode: unicodeCh [
+	| action |
+	Transcript << 'dispatching key ' << keyDesc; nl.
+	action := self keymap at: keyDesc ifAbsent: [^ self].
+	action numArgs = 0 ifTrue: [^ self perform: action].
+	action numArgs = 1 ifTrue: [^ self perform: action with: unicodeCh].
+	action numArgs = 2 ifTrue: [^ self perform: action with: unicodeCh with: keyDesc].
+    ]
+
     handlesKeys [ ^false ]
-    keyPressed: sym unicode: unicodeCh modifiers: modifierSet []
+    keyPressed: sym unicode: unicodeCh modifiers: modifierSet [
+	self dispatchKey: (KeyDescription new sym: sym; modifiers: modifierSet) unicode: unicodeCh
+    ]
     keyReleased: sym unicode: unicodeCh modifiers: modifierSet []
 
     isKeyWidget [^ World current recogniser keyWidget == self]
@@ -224,6 +288,19 @@ Object subclass: Widget [
     acceptsDrop: aWidget [ ^false ]
     acceptDrop: aWidget at: aPoint [
 	self subclassResponsibility
+    ]
+].
+
+Widget class extend [
+    | keymap |
+
+    keymap [
+        keymap ifNil: [keymap := self defaultKeymap].
+        ^ keymap
+    ]
+
+    defaultKeymap [
+        ^ Dictionary new
     ]
 ].
 
@@ -577,7 +654,10 @@ PositionableWidget subclass: TextWidget [
     | paragraph extent composition selectedPos |
 
     paragraph [ ^paragraph ]
-    paragraph: aParagraph [ paragraph := aParagraph ]
+    paragraph: aParagraph [
+	paragraph := aParagraph.
+	selectedPos ifNil: [selectedPos := 0].
+    ]
 
     extent [ ^extent ]
     extent: aPoint [ extent := aPoint ]
@@ -589,24 +669,74 @@ PositionableWidget subclass: TextWidget [
     editable [ ^self propertyAt: #editable ifAbsent: [true] ]
     editable: aBoolean [ ^self propertyAt: #editable put: aBoolean checkingDefault: true ]
 
-    keyPressed: sym unicode: unicodeCh modifiers: modifierSet [
-	Transcript << 'TW key down: ' << sym printString<< ' ' << unicodeCh printString << ' ' << modifierSet; nl.
-	unicodeCh asciiValue > 0 ifTrue: [
-	    selectedPos ifNotNil: [
-		Transcript << 'Would insert text ''' << unicodeCh <<
-		    ''' (' << unicodeCh asciiValue <<
-		    ') at position ' << selectedPos << '.'; nl.
-		paragraph :=
-		    (paragraph zipToPosition: selectedPos)
-		      insert: unicodeCh asString; "TODO: asUnicodeString. Need UTF8 codec"
-		      unzip.
-		selectedPos := selectedPos + 1.
-		self invalidate.
-	    ]].
+    TextWidget class >> defaultKeymap [
+	| map kd |
+	map := Dictionary new.
+	#((#deleteLeft '08')
+	      (#deleteRight '127')
+	      (#insertNewline '13' '10' 'C-m' 'C-j')
+	      (#moveUp '273')
+	      (#moveDown '274')
+	      (#moveRight '275')
+	      (#moveLeft '276')
+	      (#moveHome '278')
+	      (#moveEnd '279')
+	      (#pageUp '280')
+	      (#pageDown '281')
+	      )
+	    do: [:entry |
+		2 to: entry size do: [:i |
+		    map at: (KeyDescription fromString: (entry at: i)) put: entry first]].
+	32 to: 126 do: [:n |
+	    kd := KeyDescription new sym: (Character value: n).
+	    kd bind: #insertLiteralCharacter: in: map.
+	    kd modifiers add: #shift.
+	    kd bind: #insertLiteralCharacter: in: map].
+	^ map
     ]
-    keyReleased: sym unicode: unicodeCh modifiers: modifierSet [
-	Transcript << 'TW key   up: ' << sym printString << ' ' << unicodeCh printString << ' ' << modifierSet; nl.
+
+    editBy: aBlock [
+	| cursor result |
+	selectedPos ifNil: [^self].
+	cursor := paragraph zipToPosition: selectedPos.
+	result := aBlock value: cursor.
+	paragraph := cursor unzip.
+	self invalidate.
+	^ result
     ]
+
+    deleteLeft [
+	self editBy: [:c |
+	    c deleteLeft.
+	    selectedPos := selectedPos - 1]
+    ]
+
+    deleteRight [
+	self editBy: [:c | c deleteRight]
+    ]
+
+    insertNewline [
+	self insertLiteralCharacter: Character lf
+    ]
+
+    insertLiteralCharacter: unicodeCh [
+	self editBy: [:c |
+	    c insert: unicodeCh asString. "TODO: asUnicodeString. Need UTF8 codec"
+	    selectedPos := selectedPos + 1]
+    ]
+
+    genericMove: aBlock [
+	selectedPos ifNil: [^self].
+	selectedPos := aBlock value: selectedPos.
+	self invalidate.
+    ]
+
+    moveUp [ self genericMove: [:p | composition positionAbove: p] ]
+    moveDown [ self genericMove: [:p | composition positionBelow: p] ]
+    moveLeft [ self genericMove: [:p | p - 1 max: 0 ] ]
+    moveRight [ self genericMove: [:p | p + 1 min: composition maxPosition ] ]
+    moveHome [ self genericMove: [:p | (composition lineAtPosition: p) firstPosition ] ]
+    moveEnd [ self genericMove: [:p | (composition lineAtPosition: p) lastSelectablePosition ] ]
 
     "Invalidate to paint the caret disappearing and appearing."
     lostCursor [ self invalidate ]
