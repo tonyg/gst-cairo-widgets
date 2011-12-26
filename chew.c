@@ -255,6 +255,7 @@ int main(int argc, char *argv[]) {
 
     cairo_set_font_face(cr, cff);
 
+    printf("%sFace %d\n", (faceNumber == 0) ? "" : "\n", faceNumber);
     dump_fontinfo();
     dump_charmap();
     dump_kernpairs();
