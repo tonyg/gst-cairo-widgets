@@ -51,8 +51,8 @@ static long f2d(double f) {
 }
 
 static void dump_fontinfo(void) {
-  printf("familyName: %s\n", face->family_name);
-  printf("styleName: %s\n", face->style_name);
+  printf("familyName: '%s'\n", face->family_name);
+  printf("styleName: '%s'\n", face->style_name);
   printf("ascender: %ld\n", f2d(face->ascender / em_size));
   printf("descender: %ld\n", f2d(face->descender / em_size));
   printf("height: %ld\n", f2d(face->height / em_size));
