@@ -373,8 +373,6 @@ Object subclass: TextRenderer [
 
 SDL.SdlDisplay defaultFormat extent: 800@480; fullScreen: false.
 Eval [
-    | display f g |
-
     (SDL includesKey: #SdlGLDisplay)
 	ifTrue: [ display := SDL.SdlGLDisplay current ]
 	ifFalse: [ display := SDL.SdlDisplay current ].
@@ -386,18 +384,24 @@ Eval [
 	    fill.
     ].
 
-    f := (FontFaceStream on: 'zapfino.gz') next.
-    r := TextRenderer new pixelSize: 100; fontFace: f.
-    s := 'Quiet'.
+    f := (FontFaceStream on: 'gentium-basic-italic.gz') next.
+    r := TextRenderer new pixelSize: 72; fontFace: f.
 
-    cairoSurface withContextDo: [ :gc |
-	gc translateBy: 50@200.
-	r cartoonString: s on: gc.
-	gc newPath.
-	gc source: Cairo.Color black.
-	r traceString: s on: gc.
-	gc fill.
-    ].
+    drawItAt := [:s :where |
+	cairoSurface withContextDo: [ :gc |
+	    gc translateBy: where.
+	    r cartoonString: s on: gc.
+	    gc newPath.
+	    gc source: Cairo.Color black.
+	    r traceString: s on: gc.
+	    gc fill.
+	]].
+
+    drawItAt value: 'Quiet 123 flip fifth stripy' value: 50@150.
+
+    f := (FontFaceStream on: 'gentium-basic-regular.gz') next.
+    r := TextRenderer new pixelSize: 72; fontFace: f.
+    drawItAt value: 'Quiet 123 flip fifth stripy' value: 50@350.
 
     display eventSource handler: SDL.SdlEventHandler new; startEventLoop.
 ].
