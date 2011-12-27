@@ -157,7 +157,7 @@ static int do_cubic_to(FT_Vector *control1, FT_Vector *control2, FT_Vector *to, 
 	 p2d(control1->x), p2d(control1->y),
 	 p2d(control2->x), p2d(control2->y),
 	 p2d(to->x), p2d(to->y));
-  currentPoint = *to;
+  record_currentPoint(to);
   return 0;
 }  
 
