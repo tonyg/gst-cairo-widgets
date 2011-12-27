@@ -399,7 +399,7 @@ Eval [
 	gc fill.
     ].
 
-    display eventSource startEventLoop.
+    display eventSource handler: SDL.SdlEventHandler new; startEventLoop.
 ].
 
 "f := (FontFaceStream on: 'cn.gz') next"
