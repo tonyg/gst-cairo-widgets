@@ -1,5 +1,37 @@
 PackageLoader fileInPackage: #ZLib.
 
+Object subclass: FontDirectory [
+    | allFaces |
+
+    allFaces [
+	allFaces ifNil: [allFaces := Set new].
+	^ allFaces
+    ]
+
+    addFace: face [
+	self allFaces add: face.
+    ]
+
+    facesMatching: familyPattern style: stylePattern [
+	^ self allFaces select: [:face |
+	    (familyPattern match: face familyName)
+		and: [stylePattern match: face styleName]]
+    ]
+
+    faceMatching: familyPattern style: stylePattern [
+	^ (self facesMatching: familyPattern style: stylePattern) anyOne
+    ]
+].
+
+FontDirectory class extend [
+    | instance |
+
+    instance [
+        instance ifNil: [instance := self new].
+        ^ instance
+    ]
+].
+
 Object subclass: FontFace [
     | familyName styleName
 	ascender descender height maxAdvanceWidth maxAdvanceHeight
@@ -299,6 +331,16 @@ Stream subclass: FontFaceStream [
 
     close [
 	stream close
+    ]
+
+    installAllOn: aDirectory [
+	| face |
+	[ (face := self next) isNil ] whileFalse: [ aDirectory addFace: face ].
+	self close.
+    ]
+
+    installAll [
+	self installAllOn: FontDirectory instance
     ]
 ].
 

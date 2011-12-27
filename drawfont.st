@@ -46,9 +46,11 @@ Eval [
 	    fill.
     ].
 
-    f := (FontFaceStream on: 'gentium-basic-italic.gz') next.
-    r := TextRenderer new pixelSize: 72; fontFace: f.
+    (FontFaceStream on: 'gentium-basic-italic.gz') installAll.
+    (FontFaceStream on: 'gentium-basic-regular.gz') installAll.
 
+    r := TextRenderer new pixelSize: 72;
+        fontFace: (FontDirectory instance faceMatching: '*Gentium*' style: '*Italic*').
     drawItAt := [:s :where |
 	cairoSurface withContextDo: [ :gc |
 	    gc translateBy: where.
@@ -61,8 +63,8 @@ Eval [
 
     drawItAt value: 'Quiet 123 flip fifth stripy' value: 50@150.
 
-    f := (FontFaceStream on: 'gentium-basic-regular.gz') next.
-    r := TextRenderer new pixelSize: 72; fontFace: f.
+    r := TextRenderer new pixelSize: 72;
+        fontFace: (FontDirectory instance faceMatching: '*Gentium*' style: '*Regular*').
     drawItAt value: 'Quiet 123 flip fifth stripy' value: 50@350.
 
     display eventSource handler: SDL.SdlEventHandler new; startEventLoop.
