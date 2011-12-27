@@ -9,17 +9,10 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-#include <cairo.h>
-#include <cairo-ft.h>
-
 FT_Library ft;
-cairo_surface_t *surface;
-cairo_t *cr;
-
 FT_Face face;
 double em_size = 0;
 char *glyph_set = NULL;
-cairo_font_face_t *cff = NULL;
 
 static void die(char const *format, ...) {
   va_list vl;
@@ -104,14 +97,84 @@ static void dump_kernpairs(void) {
   }
 }
 
+static long p2d(FT_Pos p) {
+  return f2d(p / em_size);
+}
+
+static int have_currentPoint;
+static FT_Vector currentPoint;
+
+static void record_currentPoint(FT_Vector *to) {
+  currentPoint = *to;
+  have_currentPoint = 1;
+}
+
+static int do_move_to(FT_Vector *to, void *dummy) {
+  if (have_currentPoint) {
+    printf(" O");
+    /* In principle, the following would help remove redundant steps: */
+    /* if (currentPoint == *to) { */
+    /*   return 0; */
+    /* } */
+  }
+  printf(" M %ld %ld", p2d(to->x), p2d(to->y));
+  record_currentPoint(to);
+  return 0;
+}
+
+static int do_line_to(FT_Vector *to, void *dummy) {
+  printf(" L %ld %ld", p2d(to->x), p2d(to->y));
+  record_currentPoint(to);
+  return 0;
+}
+
+static int do_conic_to(FT_Vector *control, FT_Vector *to, void *dummy) {
+  /* Convert conic to cubic. Following the algorithm of cairo-ft-font.c here. */
+  double x0, y0, x1, y1, x2, y2, x3, y3;
+
+  x0 = currentPoint.x;
+  y0 = currentPoint.y;
+
+  x3 = to->x;
+  y3 = to->y;
+
+  x1 = x0 + 2.0/3.0 * (control->x - x0);
+  y1 = y0 + 2.0/3.0 * (control->y - y0);
+
+  x2 = x3 + 2.0/3.0 * (control->x - x3);
+  y2 = y3 + 2.0/3.0 * (control->y - y3);
+
+  printf(" C %ld %ld %ld %ld %ld %ld",
+	 p2d(x1), p2d(y1),
+	 p2d(x2), p2d(y2),
+	 p2d(x3), p2d(y3));
+  record_currentPoint(to);
+  return 0;
+}
+
+static int do_cubic_to(FT_Vector *control1, FT_Vector *control2, FT_Vector *to, void *dummy) {
+  printf(" C %ld %ld %ld %ld %ld %ld",
+	 p2d(control1->x), p2d(control1->y),
+	 p2d(control2->x), p2d(control2->y),
+	 p2d(to->x), p2d(to->y));
+  currentPoint = *to;
+  return 0;
+}  
+
+static FT_Outline_Funcs const outline_funcs = {
+  (FT_Outline_MoveToFunc) do_move_to,
+  (FT_Outline_LineToFunc) do_line_to,
+  (FT_Outline_ConicToFunc) do_conic_to,
+  (FT_Outline_CubicToFunc) do_cubic_to,
+  0,
+  0
+};
+
 static void dump_glyphs(void) {
   int glyph;
 
   for (glyph = 0; glyph < face->num_glyphs; glyph++) {
     FT_Glyph_Metrics metrics;
-    cairo_glyph_t g;
-    cairo_path_t *path;
-    cairo_path_data_t *data;
     int i;
 
     if (!glyph_set[glyph]) {
@@ -146,36 +209,19 @@ static void dump_glyphs(void) {
     printf("transformedAdvanceY: %ld\n", f2d(face->glyph->advance.y / em_size));
     */
 
-    printf("path:");
-    cairo_new_path(cr);
-    g.index = glyph;
-    g.x = 0;
-    g.y = 0;
-    cairo_glyph_path(cr, &g, 1);
-    path = cairo_copy_path(cr);
-    for (i = 0; i < path->num_data; i += path->data[i].header.length) {
-      data = &path->data[i];
-      switch (data[0].header.type) {
-	case CAIRO_PATH_MOVE_TO:
-	  printf(" M %ld %ld",
-		 f2d(data[1].point.x), -f2d(data[1].point.y));
-	  break;
-	case CAIRO_PATH_LINE_TO:
-	  printf(" L %ld %ld",
-		 f2d(data[1].point.x), -f2d(data[1].point.y));
-	  break;
-	case CAIRO_PATH_CURVE_TO:
-	  printf(" C %ld %ld %ld %ld %ld %ld",
-		 f2d(data[1].point.x), -f2d(data[1].point.y),
-		 f2d(data[2].point.x), -f2d(data[2].point.y),
-		 f2d(data[3].point.x), -f2d(data[3].point.y));
-	  break;
-	case CAIRO_PATH_CLOSE_PATH:
-	  printf(" O");
-	  break;
-      }
+    if (face->glyph->format != FT_GLYPH_FORMAT_OUTLINE) {
+      die("Glyph %d not FT_GLYPH_FORMAT_OUTLINE\n", glyph);
     }
-    cairo_path_destroy(path);
+
+    printf("path:");
+    /* I'd pass in NULL instead of &glyph, but it complains with
+       "invalid argument" (6) if I do! */
+    have_currentPoint = 0;
+    currentPoint.x = 0;
+    currentPoint.y = 0;
+    if ((errno = FT_Outline_Decompose(&face->glyph->outline, &outline_funcs, &glyph))) {
+      die("Couldn't decompose glyph %d: %d\n", glyph, errno);
+    }
     printf("\n");
   }
 }
@@ -194,16 +240,6 @@ int main(int argc, char *argv[]) {
   info("Font file: %s\n", fontfilename);
 
   /*------------------------------------------------------------------------*/
-
-  surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 512, 512);
-  if (!surface) {
-    die("Couldn't create cairo image surface\n");
-  }
-
-  cr = cairo_create(surface);
-  if (!cr) {
-    die("Couldn't create cairo context\n");
-  }
 
   if ((errno = FT_Init_FreeType(&ft))) {
     die("Couldn't initialize freetype: %d\n", errno);
@@ -242,27 +278,8 @@ int main(int argc, char *argv[]) {
     glyph_set = calloc(face->num_glyphs + 1, 1);
 
     /* if ((errno = FT_Set_Pixel_Sizes(face, face->units_per_EM, face->units_per_EM))) { */
-    /*   die("Couldn't set freetype pixel sizes: %d\n", errno); */
-    /* } */
-    if ((errno = FT_Set_Pixel_Sizes(face, 1, 1))) {
+    if ((errno = FT_Set_Char_Size(face, 3 << 6, 0, 72, 0))) {
       die("Couldn't set freetype pixel sizes: %d\n", errno);
-    }
-
-    cff = cairo_ft_font_face_create_for_ft_face(face,
-						FT_LOAD_NO_HINTING
-						| FT_LOAD_NO_BITMAP
-						| FT_LOAD_NO_SCALE);
-    if ((errno = cairo_font_face_status(cff))) {
-      die("Couldn't create cairo font face: %d: %s\n", errno, cairo_status_to_string(errno));
-    }
-
-    cairo_set_font_face(cr, cff);
-    cairo_identity_matrix(cr);
-    /* cairo_set_font_size(cr, 1); */
-    {
-      cairo_matrix_t mtx;
-      cairo_matrix_init_identity(&mtx);
-      cairo_set_font_matrix(cr, &mtx);
     }
 
     printf("%sFace %d\n", (faceNumber == 0) ? "" : "\n", faceNumber);
@@ -272,11 +289,6 @@ int main(int argc, char *argv[]) {
     dump_glyphs();
 
   face_done:
-    if (cff) {
-      cairo_font_face_destroy(cff);
-      cff = NULL;
-    }
-
     if (glyph_set) {
       free(glyph_set);
       glyph_set = NULL;
