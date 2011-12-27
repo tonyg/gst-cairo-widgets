@@ -158,17 +158,17 @@ static void dump_glyphs(void) {
       switch (data[0].header.type) {
 	case CAIRO_PATH_MOVE_TO:
 	  printf(" M %ld %ld",
-		 f2d(data[1].point.x), f2d(data[1].point.y));
+		 f2d(data[1].point.x), -f2d(data[1].point.y));
 	  break;
 	case CAIRO_PATH_LINE_TO:
 	  printf(" L %ld %ld",
-		 f2d(data[1].point.x), f2d(data[1].point.y));
+		 f2d(data[1].point.x), -f2d(data[1].point.y));
 	  break;
 	case CAIRO_PATH_CURVE_TO:
 	  printf(" C %ld %ld %ld %ld %ld %ld",
-		 f2d(data[1].point.x), f2d(data[1].point.y),
-		 f2d(data[2].point.x), f2d(data[2].point.y),
-		 f2d(data[3].point.x), f2d(data[3].point.y));
+		 f2d(data[1].point.x), -f2d(data[1].point.y),
+		 f2d(data[2].point.x), -f2d(data[2].point.y),
+		 f2d(data[3].point.x), -f2d(data[3].point.y));
 	  break;
 	case CAIRO_PATH_CLOSE_PATH:
 	  printf(" O");
@@ -241,7 +241,10 @@ int main(int argc, char *argv[]) {
     info("Allocating space for %d glyphs\n", face->num_glyphs);
     glyph_set = calloc(face->num_glyphs + 1, 1);
 
-    if ((errno = FT_Set_Pixel_Sizes(face, face->units_per_EM, face->units_per_EM))) {
+    /* if ((errno = FT_Set_Pixel_Sizes(face, face->units_per_EM, face->units_per_EM))) { */
+    /*   die("Couldn't set freetype pixel sizes: %d\n", errno); */
+    /* } */
+    if ((errno = FT_Set_Pixel_Sizes(face, 1, 1))) {
       die("Couldn't set freetype pixel sizes: %d\n", errno);
     }
 
@@ -254,6 +257,13 @@ int main(int argc, char *argv[]) {
     }
 
     cairo_set_font_face(cr, cff);
+    cairo_identity_matrix(cr);
+    /* cairo_set_font_size(cr, 1); */
+    {
+      cairo_matrix_t mtx;
+      cairo_matrix_init_identity(&mtx);
+      cairo_set_font_matrix(cr, &mtx);
+    }
 
     printf("%sFace %d\n", (faceNumber == 0) ? "" : "\n", faceNumber);
     dump_fontinfo();
