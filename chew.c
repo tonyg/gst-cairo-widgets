@@ -43,9 +43,17 @@ static long f2d(double f) {
   return (long) (f * 65536.0);
 }
 
-static void dump_fontinfo(void) {
-  printf("familyName: '%s'\n", face->family_name);
-  printf("styleName: '%s'\n", face->style_name);
+static void dump_fontinfo(char const *fileName, int faceNumber) {
+  if (face->family_name == NULL || face->family_name[0] == '\0') {
+    printf("familyName: '%s'\n", fileName);
+  } else {
+    printf("familyName: '%s'\n", face->family_name);
+  }
+  if (face->style_name == NULL || face->style_name[0] == '\0') {
+    printf("styleName: 'Face%d'\n", faceNumber);
+  } else {
+    printf("styleName: '%s'\n", face->style_name);
+  }
   printf("ascender: %ld\n", f2d(face->ascender / em_size));
   printf("descender: %ld\n", f2d(face->descender / em_size));
   printf("height: %ld\n", f2d(face->height / em_size));
@@ -282,8 +290,8 @@ int main(int argc, char *argv[]) {
       die("Couldn't set freetype pixel sizes: %d\n", errno);
     }
 
-    printf("%sFace %d\n", (faceNumber == 0) ? "" : "\n", faceNumber);
-    dump_fontinfo();
+    printf("%sFace version0\n", (faceNumber == 0) ? "" : "\n");
+    dump_fontinfo(fontfilename, faceNumber);
     dump_charmap();
     dump_kernpairs();
     dump_glyphs();

@@ -1,7 +1,7 @@
 PackageLoader fileInPackage: #ZLib.
 
 Object subclass: FontFace [
-    | number familyName styleName
+    | familyName styleName
 	ascender descender height maxAdvanceWidth maxAdvanceHeight
 	underlinePosition underlineThickness
 	charMap
@@ -9,8 +9,6 @@ Object subclass: FontFace [
 	glyphs
 	|
 
-    number [ ^number ]
-    number: v [ number := v ]
     familyName [ ^familyName ]
     familyName: v [ familyName := v ]
     styleName [ ^styleName ]
@@ -285,12 +283,9 @@ Stream subclass: FontFaceStream [
 
     next [
 	| face |
-	"TODO: remove face numbers, they're pointless"
-	"Only use them if there's no family name / style name"
 	(self loadLine startsWith: 'Face ') ifFalse: [^ nil].
-	face := FontFace new.
-	face number: line substrings second asInteger.
 	self dropLine.
+	face := FontFace new.
 	self readFaceHeadersInto: face.
 	(self loadLine = 'Unicode') ifFalse: [^ nil].
 	self dropLine.
