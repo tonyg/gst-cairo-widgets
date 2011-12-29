@@ -91,6 +91,15 @@ Object subclass: SpanLine [
 	height := height max: aSpan height.
     ]
 
+    fixUp [
+	"This is gross - an artifact of the imperative nature of this algorithm :-/"
+	glyphCount := spans inject: 0 into: [:acc :span | acc + span glyphCount].
+	width := spans inject: 0 into: [:acc :span | acc + span width].
+	baselineOffset := spans inject: 0 into: [:acc :span | acc max: span baselineOffset].
+	leading := spans inject: 0 into: [:acc :span | acc max: span leading].
+	height := spans inject: 0 into: [:acc :span | acc max: span height].
+    ]
+
     totalGlyphCount [
 	^ glyphCount ifNil: [ 0 ]
     ]
@@ -186,6 +195,11 @@ Object subclass: SpanLine [
 	^ (self offsetAtPosition: lowPosition using: gc)@top
 	    corner: (self offsetAtPosition: highPosition using: gc)@(top + self totalHeight)
     ]
+
+    lastSpan [
+	spans ifNil: [^ nil].
+	^ spans last
+    ]
 ].
 
 Object subclass: Span [
@@ -206,6 +220,10 @@ Span subclass: TextSpan [
     styledText: aText low: aLow high: aHigh gc: gc [
 	styledText := aText.
 	low := aLow.
+	self high: aHigh gc: gc.
+    ]
+
+    high: aHigh gc: gc [
 	high := aHigh.
 	extents := gc textExtents: self fragment.
     ]
@@ -403,15 +421,26 @@ Object subclass: StyledText [
 		(low > lineEnd) ]
 	    whileFalse: [
 		(lines last totalWidth = 0)
-		    ifTrue: [ lineEnd := (self indexUnder: width
-					       low: low
-					       high: lineEnd
-					       using: gc) - 1.
-			      lines last addSpan: (TextSpan new styledText: self
-								low: low
-								high: lineEnd
-								gc: gc).
-			      low := lineEnd + 1 ]
+		    ifTrue: [
+			(low = lineStart)
+			    ifTrue: [
+				lineEnd := (self indexUnder: width
+						 low: low
+						 high: lineEnd
+						 using: gc) - 1.
+				lines last addSpan: (TextSpan new styledText: self
+								  low: low
+								  high: lineEnd
+								  gc: gc)]
+			    ifFalse: [
+				lines removeLast.
+				lineEnd := (self indexUnder: width - lines last totalWidth
+						 low: low
+						 high: lineEnd
+						 using: gc) - 1.
+				lines last lastSpan high: lineEnd gc: gc.
+				lines last fixUp]. "eww"
+			low := lineEnd + 1 ]
 		    ifFalse: [ lines add: SpanLine new ]].
 	    (lineEnd < string size)
 		ifTrue: [ lines add: SpanLine new ].
