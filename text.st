@@ -403,7 +403,11 @@ Object subclass: StyledText [
 		(low > lineEnd) ]
 	    whileFalse: [
 		(lines last totalWidth = 0)
-		    ifTrue: [ lines last addSpan: (TextSpan new styledText: self
+		    ifTrue: [ lineEnd := (self indexUnder: width
+					       low: low
+					       high: lineEnd
+					       using: gc) - 1.
+			      lines last addSpan: (TextSpan new styledText: self
 								low: low
 								high: lineEnd
 								gc: gc).
